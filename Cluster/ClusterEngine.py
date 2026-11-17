@@ -1,5 +1,4 @@
 # this is the phylogic engine module that is responsible for all computation and clustering
-__version__ = "0.2.2"
 # standard library
 import collections
 import logging
