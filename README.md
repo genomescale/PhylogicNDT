@@ -1,68 +1,49 @@
 # PhylogicNDT
 
-**#This is Python2 version branch, please use "python3" branch for Python3 update
-**
-## Installation 
-First:  Clone this repository
+PhylogicNDT analyzes tumor heterogeneity and evolution using Python 3.11 or newer.
 
-    git clone https://github.com/broadinstitute/PhylogicNDT.git
-    cd PhylogicNDT
+## Installation
 
-Then either :
-	
-### Manual Install 
-Install python 2.7, R (optional) and required packages 
-For debian:
+From a checkout of this repository, install with pip:
 
-    apt-get install python-pip build-essential python-dev r-base r-base-dev git graphviz libgraphviz-dev
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install .
+```
 
+For development, use `python -m pip install -e '.[test]'` instead. All Python
+runtime dependencies are declared in `pyproject.toml`. R is optional and is only
+required to import mutation histograms from ABSOLUTE `.RData` files (`Rscript`
+must be on your PATH). Copy-number segments must be supplied as text tables.
 
-Install setuptools and wheel
+## Using the package
 
-	pip install setuptools wheel
-	
-Install required packages 
+```sh
+PhylogicNDT --help
+PhylogicNDT Cluster --help
+```
 
-	pip install -r req
-	
-Install scipy, matplotlib, and pandas (these versions are recommended) 
+Run from a writable working directory: results and `phylogicndt.log` are written
+there. The installed package includes its report templates, gene lists,
+blacklist, cytobands, and R extraction script. You can also run
+`python -m PhylogicNDT` or `python PhylogicNDT.py` from the checkout.
 
-	pip install pandas==0.19.2 scipy==1.0.0 matplotlib==2.0.0
-	pip install -e git+https://github.com/rmcgibbo/logsumexp.git#egg=sselogsumexp (for faster compute)
-
-
-
-
-### Docker Install
-Install docker from https://www.docker.com/community-edition#/download
-
-	docker build --tag phylogicndt . 
-
-## Using the Package
-
-    ./PhylogicNDT.py --help
-
-If running from the docker, first run:
-
-	docker run -i -t phylogicndt
-	cd phylogicndt
-
-
-### Clustering 
+### Clustering
 
 To run clustering on the provided sample input data:
 
- To specify inputs: 
+ To specify inputs:
 
-	./PhylogicNDT.py Cluster -i Patient_ID  -s Sample1_id:Sample1_maf:Sample1_CN_seg:Sample1_Purity:Sample1_Timepoint -s Sample2_id:Sample2_maf:Sample2_CN_seg:Sample2_Purity:Sample2_Timepoint ... SampleN_info 
+	PhylogicNDT Cluster -i Patient_ID  -s Sample1_id:Sample1_maf:Sample1_CN_seg:Sample1_Purity:Sample1_Timepoint -s Sample2_id:Sample2_maf:Sample2_CN_seg:Sample2_Purity:Sample2_Timepoint ... SampleN_info
 
-alternatively - provide a tsv sample_information_file (.sif) 
+alternatively - provide a tsv sample_information_file (.sif)
 
 with headers: sample_id maf_fn seg_fn purity timepoint
 
-    ./PhylogicNDT.py Cluster -i Patient_ID  -sif Patient.sif
+    PhylogicNDT Cluster -i Patient_ID  -sif Patient.sif
 
-the .maf should contain pre-computed raw ccf histograms based on mutations alt/ref count 
+the .maf should contain pre-computed raw ccf histograms based on mutations alt/ref count
 (Absolute annotated mafs or .Rdata files are also supported)
 if the ccf histograms are absent - the `--maf_input_type` flag must be set to
 `calc_ccf` and sample purity must be provided. Also local copy number must
@@ -70,31 +51,37 @@ be attached to each mutation in the maf with columns named `local_cn_a1` and `lo
 
 CN_seg is optional to annotate copy-number information on the trees
 
-To specify number of iterations: 
+To specify number of iterations:
 
-	./PhylogicNDT.py Cluster -ni 1000
+	PhylogicNDT Cluster -ni 1000
 
-	
+
 <sub>Acknowledgment: Clustering Module is partially inspired (primary 1D clustering) by earlier work of Carter & Getz (Landau D, Carter S , Stojanov P et al. Cell 152, 714–726, 2013)</sub>
-	
-### BuildTree (and GrowthKinetics) 
-The GrowthKinetics module fully incorporates the BuildTree libraries, so when rates are desired, there is no need to run both. 
 
- - The -w flag should provide a measure of tumor burden, with one value per input sample maf in clustering. **When ommited, stable tumor burden is assumed.** 
+### BuildTree (and GrowthKinetics)
+BuildTree constructs trees and writes cell population abundance traces.
+Pass the resulting `_cell_population_mcmc_trace.tsv` file to GrowthKinetics
+to estimate growth rates across at least two samples.
+
+ - The -w flag should provide a measure of tumor burden, with one value per input sample maf in clustering. **When ommited, stable tumor burden is assumed.**
   - The -t flag should provide relative time for spacing the samples.
-    **When omitted, equal spacing is assumed.** 
+    **When omitted, equal spacing is assumed.**
 
 Just BuildTree
 
-	./PhylogicNDT.py BuildTree -i Indiv_ID -sif Patient.sif  -m mutation_ccf_file -c cluster_ccf_file 
+	PhylogicNDT BuildTree -i Indiv_ID -sif Patient.sif  -m mutation_ccf_file -c cluster_ccf_file
 
 GrowthKinetics
 
-	./PhylogicNDT.py GrowthKinetics -i Indiv_ID -sif Patient.sif -ab cell_population_abundance_mcmc_trace -w 10 10 10 10 10 -t 1 2 3 4 5 
+	PhylogicNDT GrowthKinetics -i Indiv_ID -ab Indiv_ID_cell_population_mcmc_trace.tsv -w 10 10 10 10 10 -t 1 2 3 4 5
+
+To resample cell populations for an existing tree:
+
+    PhylogicNDT CellPopulation -i Indiv_ID -sif Patient.sif -m mutation_ccf_file -c cluster_ccf_file -t Indiv_ID_build_tree_posteriors.tsv
 
 Run Cluster together with BuildTree
 
-	./PhylogicNDT.py Cluster -i Patient_ID  -sif Patient.sif -rb
+	PhylogicNDT Cluster -i Patient_ID  -sif Patient.sif -rb
 
 ### SinglePatientTiming
 
@@ -106,7 +93,7 @@ The seg file should have the following columns:
 
 To run SinglePatientTiming:
 
-    ./PhylogicNDT.py Timing -i Indiv_ID -sif Patient.sif
+    PhylogicNDT Timing -i Indiv_ID -sif Patient.sif
 
 ### LeagueModel
 LeagueModel requires an input of comparison tables.
@@ -114,7 +101,7 @@ The comparison tables should be the output of SinglePatientTiming ending in ".co
 
 To run LeagueModel:
 
-    ./PhylogicNDT.py LeagueModel -cohort Cohort -comps comp1 comp2 ... compN
+    PhylogicNDT LeagueModel -cohort Cohort -comps comp1 comp2 ... compN
 
 Alternatively, one can use a single aggregated table. The table should have the following columns:
 
@@ -122,43 +109,54 @@ Alternatively, one can use a single aggregated table. The table should have the 
 
 To run with the aggregated table:
 
-    ./PhylogicNDT.py LeagueModel -cohort Cohort -comparison_cn comps
+    PhylogicNDT LeagueModel -cohort Cohort -comparison_fn comps
 
-### PhylogicSim 
+### PhylogicSim
 A simulation module is provided for convenience.
 
-    ./PhylogicNDT.py PhylogicSim --help
+    PhylogicNDT PhylogicSim --help
 
 Command to visualize all the options and help.
 
-    ./PhylogicNDT.py PhylogicSim 
+    PhylogicNDT PhylogicSim
 
 Run the simulation with the default paramters.
 
-    ./PhylogicNDT.py PhylogicSim -i MySimulation
+    PhylogicNDT PhylogicSim -i MySimulation
 
 Specify a prefix for all the output files
 
-    ./PhylogicNDT.py PhylogicSim -i MySimulation -ns 7
+    PhylogicNDT PhylogicSim -i MySimulation -ns 7
 
-Specify the number of samples you want to simulate. 
+Specify the number of samples you want to simulate.
 
-    ./PhylogicNDT.py PhylogicSim -i MySimulation -nodes 5
+    PhylogicNDT PhylogicSim -i MySimulation -nodes 5
 
 Specify the number of distinct clones present in your samples. Minimum 2 (The first clone is always the clonal clone)
 
-    ./PhylogicNDT.py PhylogicSim -i MySimulation -nodes 5 -seg /Example_SegFile.txt
+    PhylogicNDT PhylogicSim -i MySimulation -nodes 5 -seg /Example_SegFile.txt
 
 Specify a segment file with copy number values to sample from. See the "Example_SegFile.txt" for a format example. If no file is specified, a build-in CN profile is used, based on the hg19 contigs.
 
-    ./PhylogicNDT.py PhylogicSim -i MySimulation -nodes 5 -clust_file /Example_Clust_File.txt
+    PhylogicNDT PhylogicSim -i MySimulation -nodes 5 -clust_file /Example_Clust_File.txt
 
-Force the ccf values of each cluster on each sample, instead of generating a new random phylogeny from scratch. If -clust_file is specified, the -ns and -nodes flags are ignored an instead replaced with the values from the Clust_File. Each line of the tsv file represents a sample, with each tab separated value the ccf of a cluster. The last value of each line must always be -1 to account for the artifact cluster. 
+Force the ccf values of each cluster on each sample, instead of generating a new random phylogeny from scratch. If -clust_file is specified, the -ns and -nodes flags are ignored an instead replaced with the values from the Clust_File. Each line of the tsv file represents a sample, with each tab separated value the ccf of a cluster. The last value of each line must always be -1 to account for the artifact cluster.
 
-    ./PhylogicNDT.py PhylogicSim -i MySimulation -nodes 5 -clust_file /Example_Clust_File.txt -a 0.3
+    PhylogicNDT PhylogicSim -i MySimulation -nodes 5 -clust_file /Example_Clust_File.txt -a 0.3
 
 Specify the proportion of mutations that are artifactual (Random af unrelated to mutation/CN). Can be combined with a clust_file.
 
-    ./PhylogicNDT.py PhylogicSim -i MySimulation -nodes 5 -clust_file /Example_Clust_File.txt -pfile /Example_PurityFile.txt
+    PhylogicNDT PhylogicSim -i MySimulation -nodes 5 -clust_file /Example_Clust_File.txt -pfile /Example_PurityFile.txt
 
-TSV file to specify the purity of each sample individualy (Otherwise, the purity is specified for all the samples using the -p flag.). Each line represents a sample. The file can optionally contain an extra three columns with the alpha, beta and N values for the coverage betabinomial for each sample (Otherwise, those values are set for all samples using the -ap, -b and -nb flags respectively). 
+TSV file to specify the purity of each sample individualy (Otherwise, the purity is specified for all the samples using the -p flag.). Each line represents a sample. The file can optionally contain an extra three columns with the alpha, beta and N values for the coverage betabinomial for each sample (Otherwise, those values are set for all samples using the -ap, -b and -nb flags respectively).
+
+## Development checks
+
+```sh
+python -m pytest
+python -m build
+```
+
+The tests cover Python 3 numerical and collection semantics, packaged resources,
+CLI behavior, reports, and small analysis workflows. Source and wheel builds use
+Hatchling through the standard Python build interface.

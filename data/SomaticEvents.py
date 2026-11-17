@@ -1,6 +1,6 @@
 import os
 import sys
-import Enums
+from . import Enums
 import logging
 from intervaltree import IntervalTree
 
@@ -65,7 +65,7 @@ class SomMutation:
         self.clean_local_cn(local_cn_a1, local_cn_a2)
 
         if type_ is None:
-            # guess type for backwards compatibility, but prefer that type be passed explicitly.
+            # Infer the variant type from alleles when no annotation is supplied.
             if "-" in self.ref:
                 self.type = Enums.MutType.INS
             elif "-" in self.alt:
@@ -192,7 +192,6 @@ class SomMutation:
         return self.var_str
 
     def __repr__(self):
-        # print "str_called"
         return self.var_str
 
     def clean_local_cn(self, cn1, cn2):
@@ -385,7 +384,7 @@ class SomMutationND:
         self.gene = gene if gene is not None and 'unknown' not in gene.lower() else None
 
         if type_ is None:
-            # guess type for backwards compatibility, but prefer that type be passed explicitly.
+            # Infer the variant type from alleles when no annotation is supplied.
             if "-" in self.ref:
                 self.type = Enums.MutType.INS
             elif "-" in self.alt:
@@ -460,7 +459,7 @@ class CN_SegProfile:
 
     def __init__(self, seg_file, input_type='auto', from_sample=None):
         # try: # validate correct input
-        self.chroms = list(map(str, range(1, 23)))
+        self.chroms = list(map(str, list(range(1, 23))))
         self.chroms.append('X')
         self.chroms.append('Y')
         self.from_sample = from_sample  # from_sample can be an Object, and potential to get purity from this
@@ -475,13 +474,6 @@ class CN_SegProfile:
         logging.debug(self.seg_tree)
         ## overwrite merged_seg_tree with normal seg tree (raw seg tree)
         self.merged_seg_tree = self.seg_tree
-
-        '''
-        except:
-            print "BAD SEG FILE:", seg_file
-            #err = str(sys.exc_info()[1])
-            #raise Exception('\n'.join(['Incorrect input format for seg file ',err,'please review input data!']))
-        '''
 
     def chrom2int(self, chrom):
         try:
@@ -503,7 +495,7 @@ class CN_SegProfile:
         elif file_extension == '.db':
             return 'sqlite'
         else:
-            print >> sys.stderr, "ERROR: Cannot guess file type please use .RData, .txt, .tsv or .db"
+            print("ERROR: Cannot guess file type please use .RData, .txt, .tsv or .db", file=sys.stderr)
         sys.exit(1)
 
     def _load_segs(self, seg_file, input_type='absolute'):
@@ -515,15 +507,15 @@ class CN_SegProfile:
                     spl = row.strip("\n").split("\t")
                     if i == 0:
                         h = {x[1].lower(): x[0] for x in enumerate(spl)}
-                        if "a1_cn" in h.keys():
+                        if "a1_cn" in list(h.keys()):
                             file_type = "simulated"
                             header_indeces = [h.get("chromosome"), h.get("a1_cn"), h.get("a2_cn"), h.get('a1_cn'),
                                               h.get('start_position'), h.get('end_position')]
-                        elif "a1.seg.cn" in h.keys():
+                        elif "a1.seg.cn" in list(h.keys()):
                             file_type = "post_DP_segfile"
                             header_indeces = [h.get("chromosome"), h.get("a1.seg.cn"), h.get("a2.seg.cn"),
                                               h.get("a1.sigma"), h.get("start"), h.get("end")]
-                        elif "star" in h.keys():
+                        elif "star" in list(h.keys()):
                             file_type = "PCAWG_consensus"
                             header_indeces = [h.get("chromosome"), h.get("minor_cn"), h.get("major_cn"), h.get("star"),
                                               h.get("start"), h.get("end"), h.get("absolute_broad_major_cn"),
@@ -545,7 +537,7 @@ class CN_SegProfile:
     def _results_from_seg_file(self, seg_file, header_indeces, file_type):
 
         seg_tree = {}
-        for chrom in map(str, CN_SegProfile.CENT_LOOKUP.keys()):
+        for chrom in map(str, list(CN_SegProfile.CENT_LOOKUP.keys())):
             if chrom == '23': seg_tree['X'] = IntervalTree()
             if chrom == '24':
                 seg_tree['Y'] = IntervalTree()
@@ -562,7 +554,7 @@ class CN_SegProfile:
             for i, row in enumerate(segs):
                 spl = row.strip("\n").split("\t")
                 if i == 0: continue
-                if spl[a1_idx] == "NA" or spl[a2_idx] == "NA" or np.math.isnan(float(spl[a1_idx])) or np.math.isnan(
+                if spl[a1_idx] == "NA" or spl[a2_idx] == "NA" or np.isnan(float(spl[a1_idx])) or np.isnan(
                         float(spl[a2_idx])):
                     continue
                 else:
@@ -580,8 +572,8 @@ class CN_SegProfile:
                         min_a_cn = float(spl[a1_idx])
                         maj_a_cn = float(spl[a2_idx])
 
-                    clonal_cn_min_a = round(min_a_cn)
-                    clonal_cn_maj_a = round(maj_a_cn)
+                    clonal_cn_min_a = np.floor(min_a_cn + 0.5)
+                    clonal_cn_maj_a = np.floor(maj_a_cn + 0.5)
                     subc_cn_maj = clonal_cn_maj_a + np.sign(maj_a_cn - clonal_cn_maj_a)
                     subc_cn_min = clonal_cn_min_a + np.sign(min_a_cn - clonal_cn_min_a)
                     if subc_cn_maj == clonal_cn_maj_a:
@@ -603,36 +595,3 @@ class CN_SegProfile:
     def _results_from_db(self):
         # TODO
         pass
-
-
-##############################################################
-# EventPair() - class to store event pairs for relative timing
-##############################################################
-########### Needed for backwards compatability ###############
-class Event_Pair():
-
-    def __init__(self, event1, event2, WGD_status, from_sample=None):
-        self.from_sample = from_sample
-        self.event1 = event1
-        if event1.type == 'CNV':
-            self.event1_type = 'CN_Event'
-        else:
-            self.event1_type = 'Mutation'
-        self.event2 = event2
-        if event2.type == 'CNV':
-            self.event2_type = 'CN_Event'
-        else:
-            self.event2_type = 'Mutation'
-        self.WGD_status = WGD_status
-        self.winner = None
-        self.reason = None
-        self.prob_event1_before_event2 = None
-        self.prob_event2_before_event1 = None
-        self.prob_event_ordering_unknown = None
-        self._hash = hash(":".join([event1.gene, str(event1.pos), event2.gene, str(event2.pos)]))
-
-    def __hash__(self):
-        return self._hash
-
-    def __eq__(self, other):
-        return self is other

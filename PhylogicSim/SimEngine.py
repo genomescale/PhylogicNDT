@@ -1,6 +1,6 @@
 # Import Statements
 
-# Backend configuration necessary for execution in Docker. Need to import before other things.
+# Use a non-interactive backend for command-line report generation.
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -11,6 +11,7 @@ from scipy.stats import binom
 import networkx as nx
 import numpy as np
 import warnings
+from pathlib import Path
 
 # Debug condition
 DEBUG = False
@@ -54,12 +55,12 @@ def load_segfile(segfile):
     """
 
     seg_file_raw = open(segfile)
-    header = tsv_line(seg_file_raw.next())
+    header = tsv_line(next(seg_file_raw))
 
     if header[1].lower() != 'chromosome' or header[2].lower() != 'start_position' or header[
         3].lower() != 'end_position':
-        print "HEADER:"
-        print header
+        print("HEADER:")
+        print(header)
         raise HeaderError(
             'The seg file columns should follow the structure ID, Chromosome, Start_Position, End_Position'
             '. Current header incorrect.')
@@ -158,7 +159,7 @@ def make_clones_plot(true_cluster_ccfs, true_mutnumber, purity, fig=None, ax=Non
                 label=('True Cluster #' + str(idx) + ' (' + str(true_mutnumber[idx]) + ')'))
 
     # Add Legend and Levels and title
-    X = range(num_samples)
+    X = list(range(num_samples))
     ax.set_xticks(X)
 
     ax.set_title('Simulated Samples Clone Trajectories', fontsize=20)
@@ -204,14 +205,14 @@ def nx_walk(node, tree):
 
 
 def get_siblings(node, tree):
-    try:
-        return tree.successors(tree.predecessors(node)[0])
-    except:
+    parent = next(tree.predecessors(node), None)
+    if parent is None:
         return []
+    return list(tree.successors(parent))
 
 
 def gen_sample_from_tree_all(tree):
-    leaves = [node for node in tree.nodes() if len(tree.successors(node)) == 0]
+    leaves = [node for node in tree.nodes() if tree.out_degree(node) == 0]
     leaves_to_include = leaves
     non_zero_clusters = set(sum([list(nx_walk(x, tree.reverse())) for x in leaves_to_include], []))
 
@@ -221,12 +222,12 @@ def gen_sample_from_tree_all(tree):
         clusters = [0.] * len(tree.nodes())
         for node in nx_walk(0, tree):
             if node in non_zero_clusters:
-                if len(tree.predecessors(node)) == 0:  # clonal case
+                if tree.in_degree(node) == 0:  # clonal case
                     clusters[node] = 1.
                     continue
 
                 clusters[node] = (1 - random.random()) * (
-                            clusters[tree.predecessors(node)[0]] - sum([clusters[x] for x in get_siblings(node, tree)]))
+                            clusters[next(tree.predecessors(node))] - sum([clusters[x] for x in get_siblings(node, tree)]))
             else:
                 continue
             # if len(tree.predecessors(node)) > 0:
@@ -281,7 +282,7 @@ def get_ccf_no_adj(mult, cn, alt, ref, PURITY, grid_size=101):
 
 
 def make_sim_ccfs_ND(clones_ar_nd=[[1.0, .8, .4, .25, .12], [1.0, .6, .75, .1, .55], [1.0, .4, .8, .1, .65],
-                                   [1.0, .2, 1.0, .1, .75]], mult_ar=[1, 2, 2, 2, 2, 2, 3, 4, 4], NMUT=200,
+                                   [1.0, .2, 1.0, .1, .75]], NMUT=200,
                      PURITY=[0.7, 0.7, 0.7, 0.7, 0.7], seed=157, clust_props=None, alpha=[2, 2, 2, 2, 2],
                      beta=[18, 18, 18, 18, 18], nbin=[1000, 1000, 1000, 1000, 1000], coverage_gen=None,
                      segment_dict=None):
@@ -302,7 +303,7 @@ def make_sim_ccfs_ND(clones_ar_nd=[[1.0, .8, .4, .25, .12], [1.0, .6, .75, .1, .
     mutation_total_cn = []
     mutation_multiplicity = []
 
-    print "Sampling mutations"
+    print("Sampling mutations")
     for i in range(NMUT):
         # Sample the contig
         contig_idx = np.argmax(np.random.multinomial(1, contig_prob))
@@ -326,13 +327,13 @@ def make_sim_ccfs_ND(clones_ar_nd=[[1.0, .8, .4, .25, .12], [1.0, .6, .75, .1, .
             new_alCN = al_CN[1]
 
         # Sample the multiplicity
-        mutation_multiplicity.append(random.choice(range(1, new_alCN + 1) + [1]))  # more mult 1
+        mutation_multiplicity.append(random.choice(list(range(1, new_alCN + 1)) + [1]))  # more mult 1
 
     ND_ccfs = []
     ND_truths = {}
-    print 'Preparing sample 0'
+    print('Preparing sample 0')
     ccf_modeled_A, ccf_real_A, ccf_idx, more3_alt, real_abscn, real_multp, real_cov, alt_ref = make_sim_ccfs_1D(
-        clones_ar=clones_ar_nd[0], mult_ar=mult_ar, NMUT=NMUT, real_clust_order=None, PURITY=PURITY[0], seed=seed,
+        clones_ar=clones_ar_nd[0], NMUT=NMUT, real_clust_order=None, PURITY=PURITY[0], seed=seed,
         clust_props=clust_props, alpha=alpha[0], beta=beta[0], nbin=nbin[0], coverage_gen=coverage_gen,
         real_abscn=mutation_total_cn, real_multp=mutation_multiplicity)
 
@@ -343,13 +344,13 @@ def make_sim_ccfs_ND(clones_ar_nd=[[1.0, .8, .4, .25, .12], [1.0, .6, .75, .1, .
     passing_muts = more3_alt
 
     if DEBUG:
-        print "Mut Order"
-        print mut_order
+        print("Mut Order")
+        print(mut_order)
 
     for i in range(1, len(clones_ar_nd)):
-        print 'Preparing sample ' + str(i)
+        print('Preparing sample ' + str(i))
         ccf_modeled, ccf_real, ccf_idx, more3_alt, real_abscn, real_multp, real_cov, alt_ref = make_sim_ccfs_1D(
-            clones_ar=clones_ar_nd[i], mult_ar=mult_ar, NMUT=NMUT, alpha=alpha[i], beta=beta[i], nbin=nbin[i],
+            clones_ar=clones_ar_nd[i], NMUT=NMUT, alpha=alpha[i], beta=beta[i], nbin=nbin[i],
             coverage_gen=coverage_gen, real_clust_order=mut_order, PURITY=PURITY[i], seed=seed,
             real_abscn=mutation_total_cn, real_multp=mutation_multiplicity)
         ND_ccfs.append((ccf_modeled, ccf_real))
@@ -360,7 +361,7 @@ def make_sim_ccfs_ND(clones_ar_nd=[[1.0, .8, .4, .25, .12], [1.0, .6, .75, .1, .
 
 
 # TODO: Optimize this function to avoid loops through all the mutations: Make a single function per mut.
-def make_sim_ccfs_1D(clones_ar=[1.0, .8, .4, .25, .12], mult_ar=[1, 2, 2, 2, 2, 2, 3, 4, 5],
+def make_sim_ccfs_1D(clones_ar=[1.0, .8, .4, .25, .12],
                      NMUT=200, real_clust_order=None, PURITY=0.7, seed=157, clust_props=None,
                      alpha=2, beta=18, nbin=1000, coverage_gen=None, real_abscn=None, real_multp=None):
     # define mutations and their real CCFs
@@ -368,7 +369,7 @@ def make_sim_ccfs_1D(clones_ar=[1.0, .8, .4, .25, .12], mult_ar=[1, 2, 2, 2, 2, 
     ccf_idx = []
 
     if not real_clust_order:  # if not pre-defined
-        for i in xrange(NMUT):
+        for i in range(NMUT):
             m_c_idx = np.argmax(np.random.multinomial(1, clust_props))
             ccf_idx.append(m_c_idx)
             if clones_ar[m_c_idx] >= 0:
@@ -376,36 +377,15 @@ def make_sim_ccfs_1D(clones_ar=[1.0, .8, .4, .25, .12], mult_ar=[1, 2, 2, 2, 2, 
             else:
                 real_ccfs.append(random.random())  # if artifact
     else:
-        for i in xrange(NMUT):
+        for i in range(NMUT):
             if clones_ar[real_clust_order[i]] >= 0:
                 real_ccfs.append(
                     clones_ar[real_clust_order[i]])  # if pre assigned cluster membership , mostly for ND simulation
             else:
                 real_ccfs.append(random.random())  # if artifact
 
-    # assign abs copy numbers
-
-    # Leaving old method of cn assignment for reproducibility/backwards comp.
-    if real_abscn == None:
-        real_abscn = []
-        for i in xrange(NMUT):
-            # Make sure that the copy number is not zero
-            new_cn = 0
-            while new_cn == 0:
-                new_cn = random.choice(mult_ar)
-            real_abscn.append(new_cn)
-    else:
-        if DEBUG:
-            print 'Using ND provided CN'
-
-    # assign multipl-s
-    if real_multp == None:
-        real_multp = []
-        for i in real_abscn:
-            real_multp.append(random.choice(range(1, i + 1) + [1]))  # more mult 1
-    else:
-        if DEBUG:
-            print 'Using provided multiplicity'
+    if real_abscn is None or real_multp is None:
+        raise ValueError('Supply per-mutation copy numbers and multiplicities from the segment profile')
 
     # calc real AFs
     real_AFs = []
@@ -421,7 +401,7 @@ def make_sim_ccfs_1D(clones_ar=[1.0, .8, .4, .25, .12], mult_ar=[1, 2, 2, 2, 2, 
 
         # If a file was passed, just sample from the file.
         if coverage_gen is not None:
-            real_cov.append(coverage_gen.next())
+            real_cov.append(next(coverage_gen))
 
         # If a file was not passed, use the beta binomial.
         elif total_cn == 2:
@@ -432,8 +412,8 @@ def make_sim_ccfs_1D(clones_ar=[1.0, .8, .4, .25, .12], mult_ar=[1, 2, 2, 2, 2, 
             scaled_mean_cov = 100 * (1 - PURITY) + 100 * PURITY * total_cn / 2.
             new_beta = alpha * (nbin - scaled_mean_cov) / scaled_mean_cov
             if new_beta <= 0:
-                print new_beta, total_cn
-                print 'NEW BETA BELOW 0, renormalizing to original beta'
+                print(new_beta, total_cn)
+                print('NEW BETA BELOW 0, renormalizing to original beta')
                 new_beta = beta
             real_cov.append(rand_betabin(alpha, new_beta, nbin, n=1)[0])
 
@@ -463,8 +443,8 @@ def make_sim_ccfs_1D(clones_ar=[1.0, .8, .4, .25, .12], mult_ar=[1, 2, 2, 2, 2, 
 ###MAIN SIMULATION FUNCTION###
 def run_simulations(args):
     ### CLUSTER CCF GENERATION ###
-    if args.clust_file == None:
-        print 'Generating a random tree'
+    if args.clust_file is None:
+        print('Generating a random tree')
         # Generate a Random Tree
         good_sim = 0
         tree = gen_tree(args.min_nodes)
@@ -499,12 +479,12 @@ def run_simulations(args):
             else:
                 good_sim = 1
 
-        print 'Tree Edges:'
-        print tree.edges()
+        print('Tree Edges:')
+        print(tree.edges())
 
     # If a cluster file is specified, read it.
     else:
-        print 'Reading clusters from file ' + args.clust_file
+        print('Reading clusters from file ' + args.clust_file)
         clusters = []
         file = open(args.clust_file, 'r')
         for line in file:
@@ -520,8 +500,8 @@ def run_simulations(args):
         if args.min_nodes < 2:
             raise InputError("The cluster file needs to specify at least one subclonal clone")
 
-    print 'Clusters:'
-    print clusters
+    print('Clusters:')
+    print(clusters)
 
     ### SET PURITY AND COVERAGE INPUTS ###
     # First declare the given values, then replace if a file is provided.
@@ -532,7 +512,7 @@ def run_simulations(args):
 
     # Read the values from the file if provided
     if args.purity_file is not None:
-        print 'Using provided purity file'
+        print('Using provided purity file')
         file = open(args.purity_file, 'r')
         alpha = []
         beta = []
@@ -556,20 +536,20 @@ def run_simulations(args):
                 "Purity file contains less purity values (%d) than samples to simulate (%d)" % (len(purity), args.nsamp))
 
 
-    print "Purity:"
-    print purity
+    print("Purity:")
+    print(purity)
 
     #Generate the Coveage
     if args.cov_file is not None:
-        print 'Using provided coverage file to sample coverage.'
+        print('Using provided coverage file to sample coverage.')
         coverage_samp = [int(x.strip("\n")) for x in open(args.cov_file).readlines() if int(x.strip("\n")) > 0]
         random.shuffle(coverage_samp)
         coverage_samp = itertools.cycle(coverage_samp)
 
     else:
-        print 'Using betabinomial coverage distribution with alpha ' + str(alpha) + ' beta ' + str(
-            beta) + ' and n ' + str(nbin)
-        print 'Binomial mean will be modified in cases where copy number is different from 2'
+        print('Using betabinomial coverage distribution with alpha ' + str(alpha) + ' beta ' + str(
+            beta) + ' and n ' + str(nbin))
+        print('Binomial mean will be modified in cases where copy number is different from 2')
         coverage_samp = None
 
     # Number of values to calculate for the ccf. Why is this not a parametere that's passed in?
@@ -582,14 +562,12 @@ def run_simulations(args):
     # the proportion of mutations that are artifacts.
     clust_props=[random.random()+0.1 for x in sorted(clusters)[0]]
     clust_props=[x/sum(clust_props[:-1])*(1-args.artifacts) for x in clust_props[:-1]]+[args.artifacts]
-    print "Cluster Proportions:"
-    print clust_props
+    print("Cluster Proportions:")
+    print(clust_props)
 
     ### PREPARE CN INPUT ###
-    # TODO: Remove cn_dist once it's deprecated
-    # Read the cn distribution file. If no segments file provided, use the standard hg19 values.
-    if args.cn_dist == None:
-        cn_dist = [1, 2, 2, 2, 2, 2, 3, 4, 4]
+    # Read the segment file, or use the standard hg19 profile.
+    if args.cn_dist is None:
         segment_data = {}
         warnings.warn('No segment file provided, using hg19 whole genome segments and example CN distribution. Randomly'
                       ' generated copy number distributions will be implemented in the future.', FutureWarning)
@@ -600,39 +578,36 @@ def run_simulations(args):
         segment_data['al_CN'] = hg19_alCN
 
     else:
-        print 'Using provided segments file to sample absolute copy number.'
+        print('Using provided segments file to sample absolute copy number.')
         segment_data = load_segfile(args.cn_dist)
-        cn_dist = segment_data['tot_CN']
 
-    print "Total Copy Number distribution:"
-    print cn_dist
+    print("Total Copy Number distribution:")
+    print(segment_data['tot_CN'])
 
     # TODO: Add a maximum mutation number
 
     # TODO: In the future, output a segment file as well.
 
     if DEBUG:
-        print "Coverage method:"
-        print coverage_samp
+        print("Coverage method:")
+        print(coverage_samp)
 
     ### RUN SIM ###
     a, passing_muts, sym_truths, mutation_contigs, mutation_pos = make_sim_ccfs_ND(clones_ar_nd=clusters,
                                                                                    clust_props=clust_props,
                                                                                    NMUT=args.nmuts, PURITY=purity,
-                                                                                   mult_ar=cn_dist, alpha=alpha,
+                                                                                   alpha=alpha,
                                                                                    beta=beta, nbin=nbin,
                                                                                    coverage_gen=coverage_samp,
                                                                                    segment_dict=segment_data)
 
     # Creating sif file for this simulations
     header = ['sample_id', 'maf_fn', 'seg_fn', 'purity', 'timepoint']
-    import inspect, os
-    path = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
     with open(args.indiv_id + '.sif', 'w') as writer:
         writer.write('\t'.join(header) + '\n')
         for j in range(len(a)):
             sample_name = args.indiv_id + "_" + str(j)
-            line = [sample_name, path + '/' + sample_name + ".txt", '', str(args.purity), str(j)]
+            line = [sample_name, str(Path(sample_name + ".txt").resolve()), '', str(purity[j]), str(j)]
             writer.write('\t'.join(line) + '\n')
 
     ### OUTPUT ###
@@ -643,7 +618,7 @@ def run_simulations(args):
                  "t_alt_count"]) + "\t")
             outccf.write("\t".join(['ccf_' + str('%.2f' % num) for num in np.linspace(0, 1, grid_size)]) + "\n")
 
-            print "Writing sample " + str(j)
+            print("Writing sample " + str(j))
 
             sample_truth = sym_truths[j]
             for i, line in enumerate(a[j][0]):
@@ -651,10 +626,10 @@ def run_simulations(args):
                 alt, ref = sample_truth['alt_ref'][i]
                 cov = sample_truth['real_cov'][i]
                 if DEBUG:
-                    print alt + ref, cov
-                    print alt + ref == cov
-                    print alt, ref
-                    print a[j][1][i]
+                    print(alt + ref, cov)
+                    print(alt + ref == cov)
+                    print(alt, ref)
+                    print(a[j][1][i])
                 # Check that the mutation passes 3 alt reads the condition
                 if passing_muts[i]:
                     line[line < 0] = 0
@@ -676,8 +651,8 @@ def run_simulations(args):
                     outccf.write("\t" + str(a[j][1][i]))
                 outccf.write("\n")
 
-    print 'Number of Mutations that fullfill 3 alt read condition:'
-    print np.sum(passing_muts == True)
+    print('Number of Mutations that fullfill 3 alt read condition:')
+    print(np.sum(passing_muts == True))
 
     # Find the number of mutations per cluster. The extra cluster is artifacts.
     num_mut = {}
@@ -693,8 +668,8 @@ def run_simulations(args):
     # Extract the artifacts
     artifact_nmuts = num_mut.pop(args.min_nodes + 1, 0)
 
-    print "Number of valid artifact mutations"
-    print artifact_nmuts
+    print("Number of valid artifact mutations")
+    print(artifact_nmuts)
 
     write_out_list = []
 
@@ -710,11 +685,10 @@ def run_simulations(args):
         write_out_list.append("beta\t" + str(beta) + "\n")
         write_out_list.append("nbin\t" + str(nbin) + "\n")
         write_out_list.append("frac_artifacts\t" + str(args.artifacts) + "\n")
-        write_out_list.append("cn_dist_unused\t" + str(cn_dist) + "\n")
         write_out_list.append("num_valid_muts\t" + str(np.sum(passing_muts == True)) + "\n")
         write_out_list.append("num_valid_artifactmuts\t" + str(artifact_nmuts) + "\n")
 
-        if args.clust_file == None:
+        if args.clust_file is None:
             write_out_list.append("nodes\t" + str(len(tree.nodes())) + "\n")
             write_out_list.append("edges\t" + str(tree.edges()) + "\n")
             write_out_list.append("clust_file\tNA\n")
@@ -737,7 +711,7 @@ def run_simulations(args):
         p_file.write(write_out_string)
 
     # Reorder the cluster ccfs to input into the plotting function
-    temp_clust = np.matrix(clusters)
+    temp_clust = np.asarray(clusters)
     true_clust_CCF = temp_clust.transpose().tolist()
 
     pdf_fig, (ax1, ax2) = plt.subplots(2, figsize=(25, 16))
@@ -749,16 +723,18 @@ def run_simulations(args):
 
     none_fig, ax2 = make_clones_plot(true_clust_CCF, num_mut, purity, ax=ax2)
     pdf_fig.savefig(args.indiv_id + '_report.pdf', bbox_inches='tight')
+    plt.close(pdf_fig)
 
 
     out_fig, out_ax = make_clones_plot(true_clust_CCF, num_mut, purity)
     out_fig.savefig(args.indiv_id + '_plot.png', bbox_inches='tight')
+    plt.close(out_fig)
 
     if DEBUG:
-        print "CLUSTER DEBUGGING:"
-        print "clusters"
-        print clusters
-        print "temp_clust"
-        print temp_clust
-        print "true_clust_CCF"
-        print true_clust_CCF
+        print("CLUSTER DEBUGGING:")
+        print("clusters")
+        print(clusters)
+        print("temp_clust")
+        print(temp_clust)
+        print("true_clust_CCF")
+        print(true_clust_CCF)

@@ -11,6 +11,7 @@ from scipy.stats import gaussian_kde
 import itertools
 import copy
 import logging
+import math
 
 class Eve_Pair():
 
@@ -152,8 +153,8 @@ class League():
                 if eve not in self.event_prev:
                     self.event_prev[eve] = 0
 
-        for samp in sample_list:
-            for eve in self.events_per_samp[samp]:
+        for samp in sorted(sample_list):
+            for eve in sorted(self.events_per_samp[samp]):
                 if eve not in self.event_prev:
                     self.event_prev[eve] = 0
                 self.event_prev[eve] += 1
@@ -162,7 +163,7 @@ class League():
 
     def remove_samps_wout_event(self,event):
 
-        for samp in self.events_per_samp.keys():
+        for samp in list(self.events_per_samp):
             if event not in self.events_per_samp[samp]:
                 del self.events_per_samp[samp]
                 del self.events_per_samp_full[samp]
@@ -171,7 +172,7 @@ class League():
 
     def remove_samps_with_event(self,event):
 
-        for samp in self.events_per_samp.keys():
+        for samp in list(self.events_per_samp):
             if event in self.events_per_samp[samp]:
                 del self.events_per_samp[samp]
                 del self.events_per_samp_full[samp]
@@ -182,7 +183,7 @@ class League():
 
         n_samps = 0
         output = open(self.cohort+'.final_samples.tsv','w')
-        for samp in self.events_per_samp.keys():
+        for samp in list(self.events_per_samp):
             if samp not in samps:
                 del self.events_per_samp[samp]
                 del self.events_per_samp_full[samp]
@@ -196,7 +197,7 @@ class League():
 
     def remove_samps(self,samps):
 
-        for samp in self.events_per_samp.keys():
+        for samp in list(self.events_per_samp):
             if samp in samps:
                 del self.events_per_samp[samp]
                 del self.events_per_samp_full[samp]
@@ -283,7 +284,7 @@ class League():
             num_hits = {}
             point_muts = {}
 
-            for mut in self.events_per_samp_full[samp]:
+            for mut in sorted(self.events_per_samp_full[samp]):
                 if self.mut_type[self.gene_names[mut]] in ['arm_level','WGD','focal_level']:
                     self.final_events_full[samp].append(mut)
                 else:
@@ -332,7 +333,7 @@ class League():
         # first, add top occuring gains
         for i,(eve,n_occur) in enumerate(sorted([x for x in self.event_prev.items()
                                                  if self.mut_type[x[0]] in ['arm_level'] and
-                                                    'gain' in x[0]], key = lambda y:y[1],reverse=True)):
+                                                    'gain' in x[0]], key=lambda y: (-y[1], y[0]))):
             if i >= num_gains_default: break
             if n_occur/float(self.n_samps) < min_prevalence: break
             final_event_list.append(eve)
@@ -341,7 +342,7 @@ class League():
         # then, add top occuring losses
         for i,(eve,n_occur) in enumerate(sorted([x for x in self.event_prev.items()
                                                  if self.mut_type[x[0]] in ['arm_level'] and
-                                                    'loss' in x[0]], key = lambda y:y[1],reverse=True)):
+                                                    'loss' in x[0]], key=lambda y: (-y[1], y[0]))):
             if i >= num_losses_default: break
             if n_occur/float(self.n_samps) < min_prevalence: break
             final_event_list.append(eve)
@@ -350,7 +351,7 @@ class League():
         # then, add rest of arm events
         for i,(eve,n_occur) in enumerate(sorted([x for x in self.event_prev.items()
                                                  if self.mut_type[x[0]] in ['arm_level'] and
-                                                    x[0] not in final_event_list], key = lambda y:y[1],reverse=True)):
+                                                    x[0] not in final_event_list], key=lambda y: (-y[1], y[0]))):
             if i+num_arm >= max_arm: break
             if n_occur/float(self.n_samps) < min_prevalence: break
             final_event_list.append(eve)
@@ -358,7 +359,7 @@ class League():
         # then, add snvs/indels
         for i,(eve,n_occur) in enumerate(sorted([x for x in self.event_prev.items()
                                                  if self.mut_type[x[0]] in ['snv']],
-                                                key = lambda y:y[1],reverse=True)):
+                                                key=lambda y: (-y[1], y[0]))):
             if i >= max_mut: break
             if n_occur/float(self.n_samps) < min_prevalence: break
             final_event_list.append(eve)
@@ -366,7 +367,7 @@ class League():
         # then, add focal events
         for i,(eve,n_occur) in enumerate(sorted([x for x in self.event_prev.items()
                                                  if self.mut_type[x[0]] in ['focal_level'] and
-                                                    'homdel' not in x[0]], key = lambda y:y[1],reverse=True)):
+                                                    'homdel' not in x[0]], key=lambda y: (-y[1], y[0]))):
             if i >= max_focal: break
             if n_occur/float(self.n_samps) < min_prevalence: break
             final_event_list.append(eve)
@@ -374,7 +375,7 @@ class League():
         # then, add homdels
         for i,(eve,n_occur) in enumerate(sorted([x for x in self.event_prev.items()
                                                  if self.mut_type[x[0]] in ['focal_level'] and
-                                                    'homdel' in x[0]], key = lambda y:y[1],reverse=True)):
+                                                    'homdel' in x[0]], key=lambda y: (-y[1], y[0]))):
             if i >= max_homdel: break
             if n_occur/float(self.n_samps) < min_prevalence: break
             final_event_list.append(eve)
@@ -383,7 +384,7 @@ class League():
         if 'WGD' in self.event_prev:
             final_event_list.append('WGD')
 
-        final_event_list = list(set(final_event_list))
+        final_event_list = sorted(set(final_event_list))
         return final_event_list
 
     def form_pairs_for_league_model(self,final_event_list=None):
@@ -402,7 +403,7 @@ class League():
         if samples is not None: sample_list = samples
         else: sample_list = self.event_pairs_per_samp.keys()
 
-        for samp in sample_list:
+        for samp in sorted(sample_list):
             for pair in self.event_pairs_per_samp[samp].keys():
                 eve1,eve2 = pair
                 sorted_pair = tuple(sorted([eve1,eve2]))
@@ -559,7 +560,7 @@ class League():
 
         colors_l = ['black'] * len(colors_v)
         if type == 'odds':
-            x_in = np.linspace(np.math.log(1./self.num_seasons,10), np.math.log(self.num_seasons,10), 10000 + 1)
+            x_in = np.linspace(math.log10(1. / self.num_seasons), math.log10(self.num_seasons), 10000 + 1)
         elif type == 'pos':
             x_in = np.linspace(1, len(self.final_event_list), 10000 + 1)
 
@@ -611,7 +612,7 @@ class League():
                   str(len(self.final_event_list)), fontsize=16)
         if type == 'odds':
             plt.xlabel('relative log odds timing', fontsize=16)
-            plt.xlim(np.math.log(1./self.num_seasons,10)-0.1,np.math.log(self.num_seasons,10)+0.1)
+            plt.xlim(math.log10(1. / self.num_seasons) - 0.1, math.log10(self.num_seasons) + 0.1)
         elif type == 'pos':
             plt.xlabel('event position', fontsize=16)
             plt.xlim(0, len(self.final_event_list)+1)
@@ -620,7 +621,7 @@ class League():
         ax2 = plt.subplot(gs[8:])
         plt.title('prevalence', fontsize=10)
         sns.set_style('white')
-        bars = ax2.barh(np.array(range(len(sorted_medians))),
+        bars = ax2.barh(np.arange(len(sorted_medians)),
                         [self.full_event_prev[event[0]] for event in sorted_medians], color=colors_v, align='center')
         labels = [str(int(round(
             [self.full_event_prev[event[0]] for event in

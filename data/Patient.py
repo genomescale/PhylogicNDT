@@ -1,10 +1,10 @@
 ##########################################################
 # Patient - central class to handle and store sample CCF data
 ##########################################################
-from Sample import TumorSample
-from Sample import RNASample
-from SomaticEvents import SomMutation, CopyNumberEvent
-from Enums import CSIZE, CENT_LOOKUP
+from .Sample import TumorSample
+from .Sample import RNASample
+from .SomaticEvents import SomMutation, CopyNumberEvent
+from .Enums import CSIZE, CENT_LOOKUP
 import os
 import sys
 import logging
@@ -13,13 +13,7 @@ import itertools
 import numpy as np
 from intervaltree import Interval, IntervalTree
 
-# Logsumexp options
-import pkgutil
-
-if pkgutil.find_loader('sselogsumexp') is not None:
-    from sselogsumexp import logsumexp
-else:
-    from scipy.misc import logsumexp  # LogAdd
+from scipy.special import logsumexp
 
 
 class Patient:
@@ -90,7 +84,7 @@ class Patient:
 
         self.unclustered_muts = []
 
-        self.concordant_cn_tree = {chrom: IntervalTree() for chrom in list(map(str, range(1, 23))) + ['X', 'Y']}
+        self.concordant_cn_tree = {chrom: IntervalTree() for chrom in list(map(str, list(range(1, 23)))) + ['X', 'Y']}
 
         # BuildTree
         self.TopTree = None
@@ -209,7 +203,7 @@ class Patient:
                 # sort concordant variants by presence in driver then var_str/gene name
                 sample.concordant_variants.sort(
                     key=lambda x: (str(x).split('_')[0] in self.driver_genes, str(x), x.var_str))
-                sample.private_mutations = [mut for mut in sample.concordant_variants if mut.alt_cnt > 0]
+                sample.private_mutations = [mut for mut in sample.concordant_variants if mut.alt_cnt is not None and mut.alt_cnt > 0]
 
         self._validate_sample_names()
         try:
@@ -242,7 +236,7 @@ class Patient:
                 sample.concordant_variants = []
             sample.concordant_with_samples = []
 
-            for mut in sample.mutations + sample.low_coverage_mutations.values():
+            for mut in sample.mutations + list(sample.low_coverage_mutations.values()):
 
                 # TODO: Add this as a flag
                 # if mut.mut_category is not None and ("rna" in mut.mut_category.lower() or "utr" in mut.mut_category.lower()):
@@ -330,7 +324,7 @@ class Patient:
 
     def cluster_temp_removed(self):
         clust_CCF_results = self.ClusteringResults.clust_CCF_dens
-        for mut in self.sample_list[0].low_coverage_mutations.values():
+        for mut in list(self.sample_list[0].low_coverage_mutations.values()):
             mut_coincidence = np.ones(len(clust_CCF_results))
             for i, sample in enumerate(self.sample_list):
                 try:
@@ -353,14 +347,14 @@ class Patient:
                     mut.cluster_assignment = cluster_assignment
                     mut.clust_ccf = clust_CCF_results[cluster_assignment - 1][i]
             else:
-                print('Did not cluster ' + str(mut))
+                print(('Did not cluster ' + str(mut)))
                 self.unclustered_muts.append(mut.var_str)
                 for sample in self.sample_list:
                     try:
                         mut = sample.low_coverage_mutations[mut.var_str]
                         sample.unclustered_muts.append(mut)
                     except KeyError:
-                        print(mut.var_str + ' not found in ' + sample.sample_name)
+                        print((mut.var_str + ' not found in ' + sample.sample_name))
                 # for sample in self.sample_list:
                 #     mut = sample.get_mut_by_varstr(mut.var_str)
                 #     mut.cluster_assignment = None
@@ -523,7 +517,7 @@ class Patient:
 
     def get_arm_level_cn_events(self):
         n_samples = len(self.sample_list)
-        for ckey, (chrom, csize) in enumerate(zip(list(map(str, range(1, 23))) + ['X', 'Y'], CSIZE)):
+        for ckey, (chrom, csize) in enumerate(zip(list(map(str, list(range(1, 23)))) + ['X', 'Y'], CSIZE)):
             centromere = CENT_LOOKUP[ckey + 1]
             tree = IntervalTree()
             for sample in self.sample_list:
@@ -531,7 +525,7 @@ class Patient:
                     tree.update(sample.CnProfile[chrom])
             tree.split_overlaps()
             tree.merge_equals(data_initializer=[], data_reducer=lambda a, c: a + [c])
-            c_tree = IntervalTree(filter(lambda s: len(s.data) == n_samples, tree))
+            c_tree = IntervalTree([s for s in tree if len(s.data) == n_samples])
             event_segs = set()
             for seg in c_tree:
                 start = seg.begin
@@ -687,7 +681,7 @@ class NDHistogram:
     def phase(self, m1, m2):
         return self._phasing[frozenset({m1, m2})]
 
-    def iteritems(self):
+    def items(self):
         for idx, mut in enumerate(self._hist_array):
             yield self._labels[idx], mut
 

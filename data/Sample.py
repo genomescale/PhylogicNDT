@@ -11,7 +11,7 @@ from intervaltree import Interval, IntervalTree
 
 from scipy.interpolate import interp1d
 
-from SomaticEvents import SomMutation, CopyNumberEvent
+from .SomaticEvents import SomMutation, CopyNumberEvent
 
 from utils.calc_ccf import calc_ccf as calc_ccf_
 
@@ -50,11 +50,11 @@ class TumorSample:
                  DNAsource=None,
                  timepoint=None,
                  ccf_grid_size=101,
-                 artifact_blacklist=os.path.join(os.path.dirname(__file__), 'supplement/Blacklist_SNVs.txt'),
+                 artifact_blacklist=os.path.join(os.path.dirname(__file__), 'supplement_data/Blacklist_SNVs.txt'),
                  artifact_whitelist='',
                  PoN=None,
                  use_indels=False,
-                 min_coverage=None,
+                 min_coverage=8,
                  delete_auto_bl=False,
                  _additional_muts=None,
                  seg_file=None,
@@ -111,7 +111,7 @@ class TumorSample:
     # TODO: limit ability of people to change mut from outside of the class
     @property  # dynamically set variable (if mutations are updated)
     def mut_varstr(self):
-        return [x.var_str for x in self.mutations + self.low_coverage_mutations.values()]
+        return [x.var_str for x in self.mutations + list(self.low_coverage_mutations.values())]
 
     def get_mut_by_varstr(self, variant_string):
         return self._mut_varstring_hashtable[variant_string]
@@ -159,7 +159,6 @@ class TumorSample:
             if mut.ccf_grid_size != self.ccf_grid_size:
                 logging.debug("Rebinning mutation from {} to {} bins".format(mut.ccf_grid_size, self.ccf_grid_size))
                 mut.ccf_1d = self._rebin_to_n(mut.ccf_1d, self.ccf_grid_size)
-                mut.ccf_grid_size = self.ccf_grid_size
 
             if mut.var_str in self.known_blacklisted_mut:
                 logging.info("Removed mutation {} in sample {}".format(mut.var_str, self.sample_name))
@@ -258,8 +257,10 @@ class TumorSample:
         file_in = open(filen) if type(filen) == str else filen
 
         header = file_in.readline()
-        while header[0] == "#" or not header.strip():
-            header = header.readline()
+        while header and (header.startswith("#") or not header.strip()):
+            header = file_in.readline()
+        if not header:
+            raise ValueError("Mutation input is empty or has no header")
         header = header.strip().split("\t")
         h = collections.OrderedDict([[x[1], x[0]] for x in enumerate(header)])
 
@@ -267,16 +268,16 @@ class TumorSample:
 
         # check location of required columns
         # find ccf_bin locations (would need to change if other header names used)
-        ccf_bins_location = [column_loc[1] for column_loc in h.items() if "ccf_raw_" in column_loc[0]]
+        ccf_bins_location = [column_loc[1] for column_loc in list(h.items()) if "ccf_raw_" in column_loc[0]]
 
         # if "ccf_raw_" not in file look for oldstyle headers "0", "0.01", "1"
         if len(ccf_bins_location) == 0:
-            ccf_bin_cols = ['0'] + map(str, [round(0.01 * i, 2) for i in range(1, 100)]) + ['1']
-            ccf_bins_location = [column_loc[1] for column_loc in h.items() if column_loc[0] in ccf_bin_cols]
+            ccf_bin_cols = ['0'] + list(map(str, [round(0.01 * i, 2) for i in range(1, 100)])) + ['1']
+            ccf_bins_location = [column_loc[1] for column_loc in list(h.items()) if column_loc[0] in ccf_bin_cols]
 
         # another format
         if len(ccf_bins_location) == 0:
-            ccf_bins_location = [column_loc[1] for column_loc in h.items() if
+            ccf_bins_location = [column_loc[1] for column_loc in list(h.items()) if
                                  "ccf_0." in column_loc[0] or "ccf_1." in column_loc[0]]
 
         for line in file_in:
@@ -326,7 +327,7 @@ class TumorSample:
             std_param.append(ccf)
 
             opt_dict = {}
-            for key in self.common_field_map.keys():
+            for key in list(self.common_field_map.keys()):
                 if key in h:
                     opt_dict[self.common_field_map[key]] = spl[h[key]]
 
@@ -356,8 +357,8 @@ class TumorSample:
         dupl_removed = list(collections.OrderedDict.fromkeys(mutation_list))
         if len(dupl_removed) != len(mutation_list):
             sample_name = self.sample_name if self.sample_name is not None else ''
-            logging.warning("Duplicate mutations found in sample", sample_name + ":")
-            logging.warning("Removed", len(mutation_list) - len(dupl_removed), "mutations.")
+            logging.warning("Duplicate mutations found in sample %s:", sample_name)
+            logging.warning("Removed %d mutations.", len(mutation_list) - len(dupl_removed))
             mutation_list = dupl_removed
         return mutation_list
 
@@ -368,17 +369,10 @@ class TumorSample:
         raise NotImplementedError
 
     def _results_from_RData(self, seg_file):
-        sys.path.append(os.path.dirname(os.path.realpath(__file__)) + "/../")
-        import utils.rdata_loader
-        R_path = os.path.join(os.path.dirname(__file__), "../utils")
-        for file in os.listdir(R_path):
-            if file.endswith(".R"):
-                source_file = os.path.join(R_path, file)
-                logging.info("Sourcing " + source_file)
-                pyR.r.source(source_file)
-        purity, seg_tree = utils.rdata_loader.load_abs_rdata(seg_file)
-        self.purity = purity
-        return seg_tree
+        raise NotImplementedError(
+            "Copy-number segments cannot be loaded directly from RData; "
+            "export an ABSOLUTE .segtab.txt or a tab-delimited segment file instead."
+        )
 
     def _get_local_cn_for_each_mut(self):
         logging.info("Getting local cn for each mutation")
@@ -418,7 +412,7 @@ class TumorSample:
             else:
                 input_type = 'moo'
 
-        seg_tree = {chrom: IntervalTree() for chrom in list(map(str, range(1, 23))) + ['X', 'Y']}
+        seg_tree = {chrom: IntervalTree() for chrom in list(map(str, list(range(1, 23)))) + ['X', 'Y']}
 
         if input_type == 'none':
             return None
@@ -428,7 +422,7 @@ class TumorSample:
                 header = fh.readline().strip('\n').split('\t')
                 for line in fh:
                     try:
-                        row = dict(zip(header, line.strip('\n').split('\t')))
+                        row = dict(list(zip(header, line.strip('\n').split('\t'))))
                         chrN = row['Chromosome']
                         start = int(float(row['Start.bp']))
                         end = int(float(row['End.bp']))
@@ -455,7 +449,7 @@ class TumorSample:
                 header = fh.readline().strip('\n').split('\t')
                 for line in fh:
                     try:
-                        row = dict(zip(header, line.strip('\n').split('\t')))
+                        row = dict(list(zip(header, line.strip('\n').split('\t'))))
                         chrN = row['Chromosome']
                         start = int(float(row['Start']))
                         end = int(float(row['End']))
@@ -469,7 +463,7 @@ class TumorSample:
                 header = fh.readline().strip('\n').split('\t')
                 for line in fh:
                     try:
-                        row = dict(zip(header, line.strip('\n').split('\t')))
+                        row = dict(list(zip(header, line.strip('\n').split('\t'))))
                         chrN = row['Chromosome']
                         if chrN == '23':
                             chrN = 'X'
@@ -540,7 +534,7 @@ class TumorSample:
         # now given all of above model the CCF distributions
         # get the predicted AF
         import scipy.interpolate
-        grid_size = float(101)
+        grid_size = 101
         x = np.linspace(0, 1, grid_size)
         a = alt + 1
         b = ref + 1

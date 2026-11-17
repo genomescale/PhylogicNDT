@@ -1,6 +1,4 @@
 import os
-import sys
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 import numpy as np
 import json
@@ -259,7 +257,7 @@ class PhylogicOutput(object):
                 row = line.strip('\n\r').split('\t')
                 edges = self.reformat_edges_for_input(row[header.index('edges')])
                 edges_list.append(edges)
-                tree_iterations.append(row[header.index('n_iter')])
+                tree_iterations.append(int(row[header.index('n_iter')]))
         child_dicts = []
         for i, e in enumerate(edges_list):
             child_dicts.append({n: [] for n in itertools.chain(*e)})
@@ -324,7 +322,7 @@ class PhylogicOutput(object):
                     ccf_sum = sum(reduced_ccf)
                     if ccf_sum > 0:
                         normalized_ccf = reduced_ccf / ccf_sum
-                        custm = scipy.stats.rv_discrete(name='custm', values=(np.arange(101.), normalized_ccf))
+                        custm = scipy.stats.rv_discrete(name='custm', values=(np.arange(101), normalized_ccf))
                         sampled_abundance = custm.rvs(size=1)[0]
                         iter_ccf[child] = sampled_abundance
                         abundances[child] += sampled_abundance
@@ -412,7 +410,8 @@ class PhylogicOutput(object):
             print('Plotting trees')
             n_trees = 0
             for child_dict, ni in zip(child_dicts, tree_iterations):
-                if ni < 10:
+                # Always include the most frequent tree, including short runs.
+                if ni < 10 and n_trees:
                     break
                 n_trees += 1
                 n_muts = dict.fromkeys(child_dict, 0)
@@ -496,7 +495,7 @@ class PhylogicOutput(object):
         ax.xaxis.set_major_locator(plt.NullLocator())
         ax.yaxis.set_major_locator(plt.NullLocator())
         bytes_io = BytesIO()
-        plt.savefig(bytes_io, bbox_inches='tight', pad_inches=0., transparent=True)
+        plt.savefig(bytes_io, format='png', bbox_inches='tight', pad_inches=0., transparent=True)
         if outdir and sample:
             plt.savefig(os.path.join(outdir, '{}.pie_plot.svg'.format(sample)), format='svg')
         plt.close()
@@ -1114,10 +1113,11 @@ class PhylogicOutput(object):
     
     def plot_growth_rates(self, growth_rates, indiv):    
         import seaborn as sns
+        plt.figure()
         for clust, rate in growth_rates.items():
             if sum(rate) == 0: 
                 continue
-            sns.distplot(np.array(rate), bins=35,
+            sns.histplot(np.array(rate), bins=35, stat='density', kde=True,
                             label=str(clust) + " - %1.2f" % (sum(np.array(rate) < 0) / float(len(rate))),
                             color=ClusterColors.get_hex_string(clust))            
         plt.title("Clusters growth rate")
@@ -1125,6 +1125,7 @@ class PhylogicOutput(object):
         plt.ylabel("Probability Density")
         plt.legend()
         plt.savefig(indiv + ".growth_rate.pdf")
+        plt.close()
 
     def write_timing_tsv(self, timing_engine):
         """
@@ -1228,6 +1229,7 @@ class PhylogicOutput(object):
         ax.set_ylim(ymean - ywidth * 1.2, ymean + ywidth * 1.2)
         ax.set_title(indiv_id + ' timing graph')
         plt.savefig(indiv_id + '.comp_graph.png')
+        plt.close()
         return nodes, edges, pos
 
     @staticmethod

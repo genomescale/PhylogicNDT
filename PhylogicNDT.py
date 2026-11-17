@@ -1,35 +1,14 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # PhylogicNDT
 # Copyright (c) 2015-2019, Broad Institute, Inc. and The General Hospital Corporation. All rights reserved.
 # Copyright (c) 2015-2018,  Ignaty Leshchiner, Dimitri Livitz, Daniel Rosebrock, Gad Getz. All rights reserved.
 # Copyright (c) 2018-2019, Ignaty Leshchiner, Liudmila Elagina, Justin Cha, Oliver Spiro, Aina Martinez, Gad Getz. All rights reserved.
 
 import argparse
+import importlib
 import logging
 import os
 import sys
-
-sys.path.append(os.path.dirname(os.path.realpath(__file__)) + "/")
-
-# Remove all handlers associated with the root logger object.
-for handler in logging.root.handlers[:]:
-    logging.root.removeHandler(handler)
-filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'phylogicndt.log')
-print(filename)
-logging.basicConfig(filename=filename,
-                    filemode='w',
-                    format='%(asctime)s - %(levelname)s - %(message)s',
-                    datefmt='%d-%b-%y %H:%M:%S',
-                    level=getattr(logging, "INFO"))
-
-import Cluster.Cluster  # Cluster Tool
-import PhylogicSim.Simulations
-import BuildTree.BuildTree  # Tree Building Tool
-import BuildTree.CellPopulation
-import GrowthKinetics.GrowthKinetics
-import SinglePatientTiming.SinglePatientTiming
-import LeagueModel.LeagueModel
-
 
 def build_parser():
     parser = argparse.ArgumentParser(description="Run PhylogicNDT")
@@ -222,7 +201,7 @@ def build_parser():
                             dest='scale',
                             default=False)
 
-    clustering.set_defaults(func=Cluster.Cluster.run_tool)
+    clustering.set_defaults(func='Cluster.Cluster:run_tool')
 
     # num samples to use - can be set to restrict to first n samples.
     clustering.add_argument('--use_first_n_samples', '-ns',
@@ -264,7 +243,7 @@ def build_parser():
                             type=str,
                             help="List cluster ids to blacklist from BuildTree and CellPopulation")
 
-    buildtree.set_defaults(func=BuildTree.BuildTree.run_tool)
+    buildtree.set_defaults(func='BuildTree.BuildTree:run_tool')
 
     # CellPopulation  Tool
 
@@ -291,7 +270,7 @@ def build_parser():
                                 dest='n_iter',
                                 default=250,
                                 help='number iterations')
-    cellpopulation.set_defaults(func=BuildTree.CellPopulation.run_tool)
+    cellpopulation.set_defaults(func='BuildTree.CellPopulation:run_tool')
 
     # GrowthKinetics  Tool
 
@@ -323,7 +302,7 @@ def build_parser():
                                 dest='time',
                                 help='time')
 
-    growthkinetics.set_defaults(func=GrowthKinetics.GrowthKinetics.run_tool)
+    growthkinetics.set_defaults(func='GrowthKinetics.GrowthKinetics:run_tool')
 
     # PhylogicSim simulator
     simulations = subparsers.add_parser("PhylogicSim", help="Generate simulations drawn from a truth clustering.",
@@ -400,7 +379,7 @@ def build_parser():
                              dest='purity_file',
                              default=None,
                              help='TSV File of purity values for each sample, and optionally a 2/3/4 column with a, b and n values. Number of samples needs to match ns.')
-    simulations.set_defaults(func=PhylogicSim.Simulations.run_tool)
+    simulations.set_defaults(func='PhylogicSim.Simulations:run_tool')
 
     timing = subparsers.add_parser("Timing", help="Time somatic events in one or multiple samples.",
                                    parents=[base_parser])
@@ -410,7 +389,7 @@ def build_parser():
                         dest='min_supporting_muts',
                         default=3,
                         help='Minimum number of supporting mutations to time a copy number event')
-    timing.set_defaults(func=SinglePatientTiming.SinglePatientTiming.run_tool)
+    timing.set_defaults(func='SinglePatientTiming.SinglePatientTiming:run_tool')
 
     single_patient_timing = subparsers.add_parser("SinglePatientTiming", help="Time somatic events in one or multiple samples.",
                                    parents=[base_parser])
@@ -420,7 +399,7 @@ def build_parser():
                         dest='min_supporting_muts',
                         default=3,
                         help='Minimum number of supporting mutations to time a copy number event')
-    single_patient_timing.set_defaults(func=SinglePatientTiming.SinglePatientTiming.run_tool)
+    single_patient_timing.set_defaults(func='SinglePatientTiming.SinglePatientTiming:run_tool')
 
     leaguemodel = subparsers.add_parser("LeagueModel", help="Time somatic events across a cohort.",
                                          parents=[base_parser])
@@ -502,14 +481,35 @@ def build_parser():
                              dest='num_games_against_each_opponent',
                              default=2,
                              help='number of games each opponent plays against another in a season')
-    leaguemodel.set_defaults(func=LeagueModel.LeagueModel.run_league_model)
+    leaguemodel.set_defaults(func='LeagueModel.LeagueModel:run_league_model')
 
-    # print help without -h
-    if len(sys.argv) < 2: parser.print_help(sys.stderr)
-    return parser.parse_args()
+    return parser
 
 
-# if __name__ == "main":
-parser = build_parser()
-args = parser
-args.func(args)
+def main(argv=None):
+    """Run a tool, writing results and logs in the current working directory."""
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if not hasattr(args, 'func'):
+        parser.print_help()
+        return 0
+
+    logging.basicConfig(filename='phylogicndt.log',
+                        filemode='w',
+                        format='%(asctime)s - %(levelname)s - %(message)s',
+                        datefmt='%d-%b-%y %H:%M:%S',
+                        level=logging.INFO)
+    if args.seed is not None:
+        import random
+        import numpy as np
+
+        random.seed(args.seed)
+        np.random.seed(args.seed)
+    module_name, function_name = args.func.split(':')
+    run_tool = getattr(importlib.import_module(module_name), function_name)
+    run_tool(args)
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

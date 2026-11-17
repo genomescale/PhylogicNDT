@@ -56,12 +56,12 @@ class ClusterEngine:
                 mut.cluster_assignment = assign[mut_index]
 
             for mut in sample.concordant_variants:
-                mut.clust_ccf = np.argmax(self.results.clust_CCF_dens[mut.cluster_assignment - 1][smpl_index]) / 100.
+                mut.clust_ccf = np.argmax(self.results.clust_CCF_dens[mut.cluster_assignment - 1][smpl_index]) / float(sample.ccf_grid_size - 1)
 
             for mut in sample.concordant_variants:
                 if mut.clust_ccf >= clonal_cutoff:
                     mut.clonality = 'clonal'
-                elif mut.alt_cnt > 0:
+                elif mut.alt_cnt is not None and mut.alt_cnt > 0:
                     mut.clonality = 'subclonal'
                 else:
                     mut.clonality = 'not_detected'
@@ -80,7 +80,7 @@ class ClusterEngine:
 
         for sample in data.sample_list:
 
-            for mut in sample.low_coverage_mutations.values():
+            for mut in list(sample.low_coverage_mutations.values()):
                 if mut.type == 'CNV':
                     combined_cnvs.add(mut)
                 else:
@@ -96,7 +96,7 @@ class ClusterEngine:
             mut_row = []
             if 'WGD' in mut.var_str:
                        for sample in data.sample_list:
-                            print sample.WGD_status
+                            print(sample.WGD_status)
                        for sample in data.sample_list:
                             mut_row.append(sample.get_mut_by_varstr(mut.var_str))
             if len(mut_row) < len(data.sample_names):
@@ -200,7 +200,7 @@ class ClusterEngine:
 
         for smpl_index, sample in enumerate(data.sample_list):
             for mut_index, mut in enumerate(sample.concordant_variants):
-                if mut.alt_cnt is 0 or results["clust_CCF_dens"][results["assign"][mut_index] - 1][
+                if mut.alt_cnt == 0 or results["clust_CCF_dens"][results["assign"][mut_index] - 1][
                     smpl_index].argmax() / float(grid_size - 1) < 0.05:
                     continue
                 mut.cluster_assignment = results["assign"][mut_index]

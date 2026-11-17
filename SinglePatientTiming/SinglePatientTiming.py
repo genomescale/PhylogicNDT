@@ -2,7 +2,7 @@ import logging
 import numpy as np
 import itertools
 from data.Patient import Patient
-import TimingEngine
+from . import TimingEngine
 from output.PhylogicOutput import PhylogicOutput
 
 
@@ -41,7 +41,7 @@ def run_tool(args):
             timepoint = float(smpl_spec[4])
 
             patient_data.addSample(maf_fn, sample_id, input_type='post-clustering', seg_input_type='timing_format',
-                                   timepoint_value=timepoint, grid_size=args.grid_size,
+                                   timepoint_value=timepoint, grid_size=101,
                                    _additional_muts=None, seg_file=seg_fn, purity=purity)
 
     patient_data.preprocess_samples()

@@ -76,7 +76,7 @@ class TimingEngine(object):
                     for sample_state in states_across_samples[state]:
                         supporting_mut_varstr = supporting_mut_varstr & {mut.var_str for mut in sample_state.supporting_muts}
                     supporting_muts = []
-                    for mut_varstr in supporting_mut_varstr:
+                    for mut_varstr in sorted(supporting_mut_varstr):
                         mut = self.sample_list[0][mut_varstr]
                         alt_cnt = np.zeros(n_samples)
                         ref_cnt = np.zeros(n_samples)
@@ -87,8 +87,8 @@ class TimingEngine(object):
                             alt_cnt[i] = sample[mut_varstr].alt_cnt
                             ref_cnt[i] = sample[mut_varstr].ref_cnt
                             ccf_dist[i, :] = sample[mut_varstr].ccf_dist
-                            cn_a1[i] = sample[mut_varstr].local_cn_a1
-                            cn_a2[i] = sample[mut_varstr].local_cn_a2
+                            cn_a1[i] = sample[mut_varstr].local_cn_a1.item()
+                            cn_a2[i] = sample[mut_varstr].local_cn_a2.item()
                         nd_mut = TimingMut(self.sample_list, mut.gene, mut.chrN, mut.pos, mut.alt, mut.ref, alt_cnt,
                                            ref_cnt, cn_a1, cn_a2, ccf_dist, prot_change=mut.prot_change,
                                            cluster_assignment=mut.cluster_assignment)
@@ -142,8 +142,8 @@ class TimingEngine(object):
                     alt_cnt[i] = sample[mut_varstr].alt_cnt
                     ref_cnt[i] = sample[mut_varstr].ref_cnt
                     ccf_dist[i, :] = sample[mut_varstr].ccf_dist
-                    cn_a1[i] = sample[mut_varstr].local_cn_a1
-                    cn_a2[i] = sample[mut_varstr].local_cn_a2
+                    cn_a1[i] = sample[mut_varstr].local_cn_a1.item()
+                    cn_a2[i] = sample[mut_varstr].local_cn_a2.item()
                 nd_mut = TimingMut(self.sample_list, mut.gene, mut.chrN, mut.pos, mut.alt, mut.ref, alt_cnt,
                                    ref_cnt, cn_a1, cn_a2, ccf_dist, prot_change=mut.prot_change,
                                    cluster_assignment=mut.cluster_assignment)
@@ -156,7 +156,7 @@ class TimingEngine(object):
         self.truncal_cn_events = {gl + chrN + arm: [] for gl, (chrN, arm) in itertools.product(('gain_', 'loss_'), self.arm_regions)}
         self.all_cn_events = {gl + chrN + arm: [] for gl, (chrN, arm) in itertools.product(('gain_', 'loss_'), self.arm_regions)}
         cluster_ccfs = self._get_cluster_ccfs()
-        sample_idx = range(len(self.sample_list))
+        sample_idx = list(range(len(self.sample_list)))
         for cn_state in self.concordant_cn_states:
             for i, eve in enumerate(self.concordant_cn_states[cn_state].cn_events):
                 ccf_hats = []
@@ -510,7 +510,7 @@ class TimingCNEvent(object):
         self.cn_a1, self.cn_a2 = map(float, self.copy_number.split('/'))
         self.allelic_cn = allelic_cn
         self.total_cn = self.cn_a1 + self.cn_a2
-        self.supporting_muts = supporting_muts if (supporting_muts is not None) else []
+        self.supporting_muts = sorted(supporting_muts, key=lambda mut: mut.var_str) if supporting_muts is not None else []
         self.is_clonal = is_clonal
         self.cluster_id = cluster_id
         self.cn_state_whitelist = cn_state_whitelist

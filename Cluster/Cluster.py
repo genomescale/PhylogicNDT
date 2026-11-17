@@ -9,13 +9,12 @@ def run_tool(args):
     if not args.maf and not args.html:
         print("No output type specified, specify any combination of --html and --maf")
 
-    # sys.path.append(args.phylogic_path)
     # data storage objects
     import data.Patient as Patient
     import data.Sample as Sample
 
-    import ClusterEngine
-    import DpEngine
+    from . import ClusterEngine
+    from . import DpEngine
     if not os.path.isfile(args.PoN):
         logging.warning("PanelofNormals (PoN) inaccessible or not specified - not using PoN!")
         PoN = False
@@ -26,6 +25,7 @@ def run_tool(args):
     patient_data = Patient.Patient(artifact_blacklist=args.artifact_blacklist,
                                    PoN_file=PoN, indiv_name=args.indiv_id, artifact_whitelist=args.artifact_whitelist,
                                    min_coverage=args.min_cov, use_indels=args.use_indels,
+                                   ccf_grid_size=args.grid_size,
                                    impute_missing=args.impute_missing,
                                    driver_genes_file=args.driver_genes_file)
 
@@ -40,7 +40,7 @@ def run_tool(args):
             ##for now, assume input file order is of the type sample_id\tmaf_fn\tseg_fn\tpurity\ttimepoint
             if not file_idx:
                 continue
-            if file_line.strip('\n').strip == "":
+            if not file_line.strip():
                 continue  # empty rows
             smpl_spec = file_line.strip('\n').split('\t')
             sample_id = smpl_spec[0]
@@ -59,7 +59,7 @@ def run_tool(args):
     else:  # if sample names/files are specified directly on cmdline
 
         # sort order on timepoint or order of entry on cmdline if not present
-        print(args.sample_data)
+        print((args.sample_data))
         for idx, sample_entry in enumerate(args.sample_data):
             ##for now, assume input order is of the type sample_id\tmaf_fn\tseg_fn\tpurity\ttimepoint
             smpl_spec = sample_entry.strip('\n').split(':')
@@ -72,7 +72,7 @@ def run_tool(args):
             patient_data.addSample(maf_fn, sample_id, timepoint_value=timepoint, grid_size=args.grid_size,
                                    _additional_muts=None,
                                    seg_file=seg_fn,
-                                   purity=purity)
+                                   purity=purity, input_type=args.maf_input_type)
             if len(patient_data.sample_list) == args.n_samples:  # use only first N samples
                 break
 

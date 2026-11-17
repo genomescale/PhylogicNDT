@@ -1,8 +1,8 @@
-import LeagueModelData
+from . import LeagueModelData
 
 def run_league_model(args):
     import pandas as pd
-    import cPickle as pkl
+    import pickle as pkl
     import random
     import matplotlib.pyplot as plt
     import logging
@@ -39,11 +39,11 @@ def run_league_model(args):
     output = open(args.cohort + '.all_events.tsv', 'w')
     output.write('indiv\tevent\n')
     for indiv in league_model_run.events_per_samp_full:
-        for event in league_model_run.events_per_samp_full[indiv]:
+        for event in sorted(league_model_run.events_per_samp_full[indiv]):
             output.write(indiv + '\t' + event + '\n')
     output.close()
 
-    all_samps = set(league_model_run.events_per_samp.keys())
+    all_samps = sorted(league_model_run.events_per_samp)
     league_model_run.run_full_run(num_seasons=0, samples=all_samps, final_event_list=league_model_run.final_event_list)
     league_model_run.init_odds(league_model_run.final_event_list)
 
@@ -142,7 +142,7 @@ def run_league_model(args):
 
 def run_league_model_ipython_notebook(args):
     import pandas as pd
-    import cPickle as pkl
+    import pickle as pkl
     import random
     import matplotlib.pyplot as plt
     import logging
@@ -178,11 +178,11 @@ def run_league_model_ipython_notebook(args):
     output = open(args.cohort + '.all_events.tsv', 'w')
     output.write('indiv\tevent\n')
     for indiv in league_model_run.events_per_samp_full:
-        for event in league_model_run.events_per_samp_full[indiv]:
+        for event in sorted(league_model_run.events_per_samp_full[indiv]):
             output.write(indiv + '\t' + event + '\n')
     output.close()
 
-    all_samps = set(league_model_run.events_per_samp.keys())
+    all_samps = sorted(league_model_run.events_per_samp)
     league_model_run.run_full_run(num_seasons=0, samples=all_samps, final_event_list=league_model_run.final_event_list)
     league_model_run.init_odds(league_model_run.final_event_list)
 

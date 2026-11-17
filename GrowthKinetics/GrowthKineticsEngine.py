@@ -26,14 +26,23 @@ class GrowthKineticsEngine:
         # Number of samples for this Patient
         sample_list = list(mcmc_trace_cell_abundance.keys())
         time_points = len(sample_list)
-        n_clusters = len(list(mcmc_trace_cell_abundance[sample_list[0]]))
+        if time_points < 2:
+            raise ValueError('Growth rates require at least two samples')
+        cluster_ids = list(mcmc_trace_cell_abundance[sample_list[0]])
         #cluster_rates = defaultdict(list)
         # If times of samples are not provided, treat as an integers
-        if not times:
-            times = np.array(range(time_points)) + 1
+        if times is None or len(times) == 0:
+            times = np.arange(time_points) + 1
+        elif len(times) != time_points:
+            raise ValueError('Provide one time value per sample')
+        wbc = np.asarray(self._wbc, dtype=float)
+        if wbc.size == 0:
+            wbc = np.ones(time_points)
+        elif wbc.size != time_points:
+            raise ValueError('Provide one tumor burden value per sample')
         for n in range(n_iter):
-            adj_wbc = self._wbc * (1 + np.array([(np.random.random() - 0.5) / 100. for x in range(len(self._wbc))]))
-            for cluster_id in range(1, n_clusters + 1):
+            adj_wbc = wbc * (1 + np.array([(np.random.random() - 0.5) / 100. for x in range(len(wbc))]))
+            for cluster_id in cluster_ids:
                 cluster_abundances = []
                 for sample_name, sample_abundances in mcmc_trace_cell_abundance.items():
                     cluster_abundances.append(sample_abundances[cluster_id][n] + conv)
